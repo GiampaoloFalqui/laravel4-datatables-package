@@ -356,20 +356,49 @@ class Datatables
      *
      * @return null
      */
-    protected function saveQuery($query)
+    protected function saveQuery($query, $returnResults = false)
     {
-        $this->query = $query;
-        $this->query_type = $query instanceof \Illuminate\Database\Query\Builder ? 'fluent' : 'eloquent';
-        if ($this->dataFullSupport) {
-            if ($this->query_type == 'eloquent') {
-                $this->columns = array_map(function ($column) {
-                    return trim(DB::connection()->getPdo()->quote($column['data']), "'");
-                }, $this->input['columns']);
+        if ($returnResults === FALSE) {
+            $this->query = $query;
+
+            $queryClass = get_class($this->query);
+            if (strpos($queryClass, 'Relations')) {
+                $this->query = $this->query->getQuery();
+            }
+
+            $this->query_type = $query instanceof \Illuminate\Database\Query\Builder ? 'fluent' : 'eloquent';
+            if ($this->dataFullSupport) {
+                if ($this->query_type == 'eloquent') {
+                    $this->columns = array_map(function ($column) {
+                        return trim(DB::connection()->getPdo()->quote($column['data']), "'");
+                    }, $this->input['columns']);
+                } else {
+                    $this->columns = ($this->query->columns ?: array());
+                }
             } else {
-                $this->columns = ($this->query->columns ?: array());
+                $this->columns = $this->query_type == 'eloquent' ? ($this->query->getQuery()->columns ?: array()) : ($this->query->columns ?: array());
             }
         } else {
-            $this->columns = $this->query_type == 'eloquent' ? ($this->query->getQuery()->columns ?: array()) : ($this->query->columns ?: array());
+
+            $queryClass = get_class($query);
+            if (strpos($queryClass, 'Relations')) {
+                $query = $query->getQuery();
+            }
+
+            $query_type = $query instanceof \Illuminate\Database\Query\Builder ? 'fluent' : 'eloquent';
+            if ($this->dataFullSupport) {
+                if ($query_type == 'eloquent') {
+                    $columns = array_map(function ($column) {
+                        return trim(DB::connection()->getPdo()->quote($column['data']), "'");
+                    }, $this->input['columns']);
+                } else {
+                    $columns = ($query->columns ?: array());
+                }
+            } else {
+                $columns = $this->query_type == 'eloquent' ? ($query->getQuery()->columns ?: array()) : ($query->columns ?: array());
+            }
+
+            return ['query' => $query, 'columns' => $columns];
         }
     }
 
@@ -935,10 +964,9 @@ class Datatables
      */
     protected function count($count = 'count_all')
     {
-
         //Get columns to temp var.
         if ($this->query_type == 'eloquent') {
-            $query = $this->query->getQuery();
+            $query = $this->saveQuery($this->query, true)['query']->getQuery();
             $connection = $this->query->getModel()->getConnection()->getName();
         } else {
             $query = $this->query;
@@ -949,7 +977,6 @@ class Datatables
         $countQuery = clone $query;
         if (!preg_match('/UNION/i', $countQuery->toSql())) {
             $countQuery->select(DB::raw("'1' as row"));
-
             // if query has "having" clause add select columns
             if ($countQuery->havings) {
                 foreach ($countQuery->havings as $having) {
