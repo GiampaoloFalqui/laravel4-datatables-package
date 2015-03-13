@@ -252,8 +252,14 @@ class Datatables
     protected function save_query($query)
     {
         $this->query = $query;
+
+        $queryClass = get_class($this->query);
+        if (strpos($queryClass, 'Relations')) {
+            $this->query = $this->query->getQuery();
+        }
+
         $this->query_type = $query instanceof \Illuminate\Database\Query\Builder ? 'fluent' : 'eloquent';
-        $this->columns = $this->query_type == 'eloquent' ? $this->query->getQuery()->getQuery()->columns : $this->query->columns;
+        $this->columns = $this->query_type == 'eloquent' ? $this->query->getQuery()->columns : $this->query->columns;
     }
 
     /**
@@ -700,7 +706,7 @@ class Datatables
 
         //Get columns to temp var.
         if($this->query_type == 'eloquent') {
-            $query = $this->query->getQuery()->getQuery();
+            $query = $this->query->getQuery();
             $connection = $this->query->getModel()->getConnection()->getName();
         }
         else {
