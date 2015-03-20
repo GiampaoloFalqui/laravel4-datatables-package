@@ -192,6 +192,10 @@ class Datatables
     {
         if ($this->query_type == 'eloquent') {
             $this->result_object = $this->query->get();
+
+            /* var_dump($this->query->toSql());
+            dd($this->query->getBindings()); */
+
             $this->result_array = $this->result_object->toArray();
         } else {
             $this->result_object = $this->query->get();
@@ -296,7 +300,6 @@ class Datatables
     {
         $params = func_get_args();
         $this->filter_columns[$column] = array('method' => $method, 'parameters' => array_splice($params, 2));
-
         return $this;
     }
 
@@ -495,13 +498,20 @@ class Datatables
             }
 
         } elseif ($params instanceof \Illuminate\Database\Query\Expression) {
-            $params = DB::raw(str_replace('$1', $value, $params));
+            return DB::raw(str_replace('$1', $value, $params));
 
         } elseif (is_callable($params)) {
-            $params = $params($value);
+
+            $newParams = $params($value);
+
+            if (! $newParams) {
+                return str_replace('$1', $value, $params);
+            }
+
+            return $newParams;
 
         } elseif (is_string($params)) {
-            $params = str_replace('$1', $value, $params);
+            return str_replace('$1', $value, $params);
         }
 
         return $params;
@@ -701,7 +711,6 @@ class Datatables
      */
     protected function filtering()
     {
-
         // copy of $this->columns without columns removed by remove_column
         $columns_not_removed = $this->columns;
         for ($i = 0, $c = count($columns_not_removed); $i < $c; $i++) {
@@ -727,7 +736,7 @@ class Datatables
                     if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
 
                         // if filter column exists for this columns then use user defined method
-                        if (isset($that->filter_columns[$column_aliases[$i]])) {
+                        /* if (isset($that->filter_columns[$column_aliases[$i]])) {
 
                             $filter = $that->filter_columns[$column_aliases[$i]];
 
@@ -761,7 +770,8 @@ class Datatables
                                 );
                             }
 
-                        } else {
+                        } else { */
+                        if (! isset($that->filter_columns[$column_aliases[$i]])) {
                             // otherwise do simple LIKE search
 
                             $keyword = $that->formatKeyword($that->input['search']['value']);
@@ -788,15 +798,12 @@ class Datatables
                     }
                 }
             });
-
         }
 
         // column search
         for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
-            if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true" && $this->input['columns'][$i]['search']['value'] != '') {
-                // if filter column exists for this columns then use user defined method
-                if (isset($this->filter_columns[$column_aliases[$i]])) {
-
+            if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true") {
+                if ($this->input['columns'][$i]['search']['value'] != '' || isset($this->filter_columns[$column_aliases[$i]])) {
                     $filter = $this->filter_columns[$column_aliases[$i]];
 
                     if (isset($filter['parameters'][1])
@@ -806,7 +813,6 @@ class Datatables
                     } else {
                         $keyword = $this->input['columns'][$i]['search']['value'];
                     }
-
 
                     call_user_func_array(
                         array(
@@ -818,10 +824,9 @@ class Datatables
                             $keyword
                         )
                     );
-
-                } else // otherwise do simple LIKE search
+                }
+                /* else // otherwise do simple LIKE search
                 {
-
                     $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
 
                     //there's no need to put the prefix unless the column name is prefixed with the table name.
@@ -836,9 +841,12 @@ class Datatables
                         $col = strstr($column_names[$i], '(') ? DB::raw($column) : $column;
                         $this->query->where($col, 'LIKE', $keyword);
                     }
-                }
+                } */
             }
         }
+
+        // var_dump($this->query->toSql());
+        // var_dump($this->query->getBindings());
     }
 
     /**
@@ -856,9 +864,9 @@ class Datatables
         }
 
         if (Config::get('datatables::search.use_wildcards', false)) {
-            $keyword = '%' . $this->formatWildcard($value) . '%';
+            $keyword = "%{$this->formatWildcard($value)}%";
         } else {
-            $keyword = '%' . trim($value) . '%';
+            $keyword = "%" . trim($value) . "%";
         }
 
         return $keyword;
@@ -973,10 +981,10 @@ class Datatables
             $connection = $query->getConnection()->getName();
         }
 
-        // if its a normal query ( no union ) replace the select with static text to improve performance
+        // if its a normal query (no union) replace the select with static text to improve performance
         $countQuery = clone $query;
         if (!preg_match('/UNION/i', $countQuery->toSql())) {
-            $countQuery->select(DB::raw("'1' as row"));
+            $countQuery->select(DB::raw("'1' as raw"));
             // if query has "having" clause add select columns
             if ($countQuery->havings) {
                 foreach ($countQuery->havings as $having) {
@@ -1007,13 +1015,14 @@ class Datatables
             }
         }
 
+        // var_dump($this->query->toSql());
+
         // Clear the orders, since they are not relevant for count
         $countQuery->orders = null;
 
         $this->$count = DB::connection($connection)
             ->table(DB::raw('(' . $countQuery->toSql() . ') AS count_row_table'))
             ->setBindings($countQuery->getBindings())->count();
-
     }
 
     /**
