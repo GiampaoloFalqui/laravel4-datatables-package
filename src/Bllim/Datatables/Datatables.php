@@ -35,6 +35,7 @@ class Datatables
     protected $added_columns = array();
     protected $removed_columns = array();
     protected $edit_columns = array();
+    protected $rename_columns = array();
     protected $filter_columns = array();
     protected $sColumns = array();
 
@@ -63,9 +64,7 @@ class Datatables
      */
     public function __construct()
     {
-
         $this->setData($this->processData(Input::get()));
-
         return $this;
     }
 
@@ -159,7 +158,6 @@ class Datatables
         $ins = new static;
         $ins->dataFullSupport = ($dataFullSupport) ?: Config::get('datatables::dataFullSupport', false);
         $ins->saveQuery($query);
-
         return $ins;
     }
 
@@ -192,9 +190,6 @@ class Datatables
     {
         if ($this->query_type == 'eloquent') {
             $this->result_object = $this->query->get();
-
-            /* var_dump($this->query->toSql());
-            dd($this->query->getBindings()); */
 
             $this->result_array = $this->result_object->toArray();
         } else {
@@ -248,9 +243,7 @@ class Datatables
     public function addColumn($name, $content, $order = false)
     {
         $this->sColumns[] = $name;
-
         $this->added_columns[] = array('name' => $name, 'content' => $content, 'order' => $order);
-
         return $this;
     }
 
@@ -265,10 +258,14 @@ class Datatables
     public function editColumn($name, $content)
     {
         $this->edit_columns[] = array('name' => $name, 'content' => $content);
-
         return $this;
     }
 
+    public function renameColumn($old, $new)
+    {
+        $this->rename_columns[] = array('old' => $old, 'new' => $new);
+        return $this;
+    }
 
     /**
      * This will remove the columns from the returned data.  It will also cause it to skip any filters for those removed columns.
@@ -431,6 +428,32 @@ class Datatables
                 } else {
                     $rvalue[$value['name']] = $value['content'];
                 }
+            }
+
+            $dotNotationArray = [];
+            foreach ($this->rename_columns as $key => $value) {
+
+                if (strpos($value['new'], '.')) {
+                    $name = explode(".", $value['new'], 2);
+
+                    if (isset($dotNotationArray[$name[0]]) === false) {
+                        $dotNotationArray[$name[0]] = [];
+                    }
+
+                    if (isset($rvalue[$value['old']])) {
+                        $dotNotationArray[$name[0]][$value['old']] = $rvalue[$value['old']];  
+                    }
+                } else {
+                    if (isset($rvalue[$value['old']])) {
+                        $rvalue[$value['new']] = $rvalue[$value['old']];
+                    }
+                }
+
+                unset($rvalue[$value['old']]);
+            }
+
+            if (empty($dotNotationArray) === false) {
+                $rvalue = $rvalue + $dotNotationArray;                
             }
         }
     }
@@ -668,7 +691,7 @@ class Datatables
     protected function ordering()
     {
         if (array_key_exists('order', $this->input) && count($this->input['order']) > 0) {
-            $columns = $this->cleanColumns($this->aliased_ordered_columns);
+            // $columns = $this->cleanColumns($this->aliased_ordered_columns);
 
             for ($i = 0, $c = count($this->input['order']); $i < $c; $i++) {
                 $order_col = (int)$this->input['order'][$i]['column'];
@@ -720,7 +743,7 @@ class Datatables
         }
 
         //reindex keys if columns were removed
-        $columns_not_removed = array_values($columns_not_removed);
+        $columns_not_removed = array_values(array_filter($columns_not_removed));
 
         // copy of $this->columns cleaned for database queries
         $column_names = $this->cleanColumns($columns_not_removed, false);
@@ -736,7 +759,7 @@ class Datatables
                     if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
 
                         // if filter column exists for this columns then use user defined method
-                        /* if (isset($that->filter_columns[$column_aliases[$i]])) {
+                        if (isset($that->filter_columns[$column_aliases[$i]])) {
 
                             $filter = $that->filter_columns[$column_aliases[$i]];
 
@@ -770,31 +793,34 @@ class Datatables
                                 );
                             }
 
-                        } else { */
-                        if (! isset($that->filter_columns[$column_aliases[$i]])) {
-                            // otherwise do simple LIKE search
+                        } else {
 
-                            $keyword = $that->formatKeyword($that->input['search']['value']);
+                            if (! isset($that->filter_columns[$column_aliases[$i]])) {
+                                // otherwise do simple LIKE search
 
-                            // Check if the database driver is PostgreSQL
-                            // If it is, cast the current column to TEXT datatype
-                            $cast_begin = null;
-                            $cast_end = null;
-                            if ($this->databaseDriver() === 'pgsql') {
-                                $cast_begin = "CAST(";
-                                $cast_end = " as TEXT)";
-                            }
+                                $keyword = $that->formatKeyword($that->input['search']['value']);
 
-                            //there's no need to put the prefix unless the column name is prefixed with the table name.
-                            $column = $this->prefixColumn($column_names[$i]);
+                                // Check if the database driver is PostgreSQL
+                                // If it is, cast the current column to TEXT datatype
+                                $cast_begin = null;
+                                $cast_end = null;
+                                if ($this->databaseDriver() === 'pgsql') {
+                                    $cast_begin = "CAST(";
+                                    $cast_end = " as TEXT)";
+                                }
 
-                            if (Config::get('datatables::search.case_insensitive', false)) {
-                                $query->orwhere(DB::raw('LOWER(' . $cast_begin . $column . $cast_end . ')'), 'LIKE', Str::lower($keyword));
-                            } else {
-                                $query->orwhere(DB::raw($cast_begin . $column . $cast_end), 'LIKE', $keyword);
+                                //there's no need to put the prefix unless the column name is prefixed with the table name.
+                                $column = $this->prefixColumn($column_names[$i]);
+
+
+
+                                if (Config::get('datatables::search.case_insensitive', false)) {
+                                    $query->orwhere(DB::raw("LOWER({$cast_begin}{$column}{$cast_end})"), 'LIKE', Str::lower($keyword));
+                                } else {
+                                    $query->orwhere(DB::raw($cast_begin . $column . $cast_end), 'LIKE', $keyword);
+                                }
                             }
                         }
-
                     }
                 }
             });
@@ -802,6 +828,9 @@ class Datatables
 
         // column search
         for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
+
+            // dd($this->input['columns']);
+
             if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true") {
                 if ($this->input['columns'][$i]['search']['value'] != '' || isset($this->filter_columns[$column_aliases[$i]])) {
                     $filter = $this->filter_columns[$column_aliases[$i]];
@@ -844,9 +873,6 @@ class Datatables
                 } */
             }
         }
-
-        // var_dump($this->query->toSql());
-        // var_dump($this->query->getBindings());
     }
 
     /**
@@ -930,6 +956,9 @@ class Datatables
 //        return $query->getGrammar()->wrap($column);
 
         $table_names = $this->tableNames();
+
+        // dd($table_names);
+
         if (count(array_filter($table_names, function($value) use (&$column) { return strpos($column, $value.".") === 0; }))) {
             //the column starts with one of the table names
             $column = $this->databasePrefix() . $column;
@@ -1014,8 +1043,6 @@ class Datatables
                 }
             }
         }
-
-        // var_dump($this->query->toSql());
 
         // Clear the orders, since they are not relevant for count
         $countQuery->orders = null;
