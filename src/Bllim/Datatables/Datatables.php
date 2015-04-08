@@ -812,7 +812,14 @@ class Datatables
                                 //there's no need to put the prefix unless the column name is prefixed with the table name.
                                 $column = $this->prefixColumn($column_names[$i]);
 
-
+                                if (strpos($column, '.')) {
+                                    $columnExploded = explode(".", $column, 2);
+                                    $intPrefix      = ucfirst($columnExploded[0]);
+                                    if (class_exists($intPrefix)) {
+                                        $intTable = (new $intPrefix)->getTable();
+                                        $column = "{$intTable}.{$columnExploded[1]}";
+                                    }
+                                }
 
                                 if (Config::get('datatables::search.case_insensitive', false)) {
                                     $query->orwhere(DB::raw("LOWER({$cast_begin}{$column}{$cast_end})"), 'LIKE', Str::lower($keyword));
@@ -828,8 +835,6 @@ class Datatables
 
         // column search
         for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
-
-            // dd($this->input['columns']);
 
             if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true") {
                 if ($this->input['columns'][$i]['search']['value'] != '' || isset($this->filter_columns[$column_aliases[$i]])) {
@@ -952,8 +957,8 @@ class Datatables
      */
     protected function prefixColumn($column)
     {
-//        $query = ($this->query_type == 'eloquent') ? $this->query->getQuery() : $this->query;
-//        return $query->getGrammar()->wrap($column);
+        // $query = ($this->query_type == 'eloquent') ? $this->query->getQuery() : $this->query;
+        // return $query->getGrammar()->wrap($column);
 
         $table_names = $this->tableNames();
 
