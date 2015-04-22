@@ -691,7 +691,24 @@ class Datatables
     protected function ordering()
     {
         if (array_key_exists('order', $this->input) && count($this->input['order']) > 0) {
+
             // $columns = $this->cleanColumns($this->aliased_ordered_columns);
+            $columns = [];
+
+            foreach ($this->input['columns'] as $column) {
+                $columns[] = $column['data'];
+            }
+
+            foreach ($columns as &$column) {
+                if (strpos($column, '.')) {
+                    $columnExploded = explode(".", $column, 2);
+                    $intPrefix      = ucfirst($columnExploded[0]);
+                    if (class_exists($intPrefix)) {
+                        $intTable = (new $intPrefix)->getTable();
+                        $column = "{$intTable}.{$columnExploded[1]}";
+                    }
+                }
+            }
 
             for ($i = 0, $c = count($this->input['order']); $i < $c; $i++) {
                 $order_col = (int)$this->input['order'][$i]['column'];
