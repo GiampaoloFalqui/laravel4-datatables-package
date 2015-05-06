@@ -299,7 +299,17 @@ class Datatables
         $this->filter_columns[$column] = array('method' => $method, 'parameters' => array_splice($params, 2));
         return $this;
     }
-
+    public function removeSearch($column)
+    {
+        for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
+            if ($this->input['columns'][$i]['searchable'] == "true" &&
+                $this->input['columns'][$i]['data']       == $column)
+            {
+                $this->input['columns'][$i]['searchable'] = "false";
+            }
+        }
+        return $this;
+    }
 
     /**
      * Sets the DT_RowID for the DataTables index column (as used to set, e.g., id of the <tr> tags) to the named column
@@ -441,7 +451,7 @@ class Datatables
                     }
 
                     if (isset($rvalue[$value['old']])) {
-                        $dotNotationArray[$name[0]][$value['old']] = $rvalue[$value['old']];  
+                        $dotNotationArray[$name[0]][$value['old']] = $rvalue[$value['old']];
                     }
                 } else {
                     if (isset($rvalue[$value['old']])) {
@@ -453,7 +463,7 @@ class Datatables
             }
 
             if (empty($dotNotationArray) === false) {
-                $rvalue = $rvalue + $dotNotationArray;                
+                $rvalue = $rvalue + $dotNotationArray;
             }
         }
     }
@@ -781,7 +791,7 @@ class Datatables
                             $filter = $that->filter_columns[$column_aliases[$i]];
 
                             // check if "or" equivalent exists for given function
-                            // and if the number of parameters given is not excess 
+                            // and if the number of parameters given is not excess
                             // than call the "or" equivalent
 
                             $method_name = 'or' . ucfirst($filter['method']);
