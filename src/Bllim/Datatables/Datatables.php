@@ -189,6 +189,10 @@ class Datatables
     protected function getResult()
     {
         if ($this->query_type == 'eloquent') {
+
+            // dd($this->query->toSql());
+            // dd($this->query->getBindings());
+
             $this->result_object = $this->query->get();
 
             $this->result_array = $this->result_object->toArray();
@@ -299,6 +303,7 @@ class Datatables
         $this->filter_columns[$column] = array('method' => $method, 'parameters' => array_splice($params, 2));
         return $this;
     }
+
     public function removeSearch($column)
     {
         for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
@@ -776,12 +781,12 @@ class Datatables
         $column_names = $this->cleanColumns($columns_not_removed, false);
         $column_aliases = $this->cleanColumns($columns_not_removed, !$this->dataFullSupport);
 
-        // global search
         if ($this->input['search']['value'] != '') {
             $that = $this;
 
             $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
 
+                // global search
                 for ($i = 0, $c = count($that->input['columns']); $i < $c; $i++) {
                     if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
 
@@ -857,54 +862,56 @@ class Datatables
                         }
                     }
                 }
+
+                // column search
+                for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
+
+                    if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true") {
+                        if ($this->input['columns'][$i]['search']['value'] != '' || isset($this->filter_columns[$column_aliases[$i]])) {
+                            $filter = $this->filter_columns[$column_aliases[$i]];
+
+                            if (isset($filter['parameters'][1])
+                                && strtoupper(trim($filter['parameters'][1])) == "LIKE"
+                            ) {
+                                $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+                            } else {
+                                $keyword = $this->input['columns'][$i]['search']['value'];
+                            }
+
+                            call_user_func_array(
+                                array(
+                                    $query,
+                                    $filter['method']
+                                ),
+                                $this->injectVariable(
+                                    $filter['parameters'],
+                                    $keyword
+                                )
+                            );
+                        }
+                        /* else // otherwise do simple LIKE search
+                        {
+                            $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+
+                            //there's no need to put the prefix unless the column name is prefixed with the table name.
+                            $column = $this->prefixColumn($column_names[$i]);
+
+                            if (Config::get('datatables::search.case_insensitive', false)) {
+                                $this->query->where(DB::raw('LOWER(' . $column . ')'), 'LIKE', Str::lower($keyword));
+                            } else {
+                                //note: so, when would a ( be in the columns?  It will break a select if that's put in the columns
+                                //without a DB::raw.  It could get there in filter columns, but it wouldn't be delt with here.
+                                //why is it searching for ( ?
+                                $col = strstr($column_names[$i], '(') ? DB::raw($column) : $column;
+                                $this->query->where($col, 'LIKE', $keyword);
+                            }
+                        } */
+                    }
+                }
             });
         }
 
-        // column search
-        for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
 
-            if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true") {
-                if ($this->input['columns'][$i]['search']['value'] != '' || isset($this->filter_columns[$column_aliases[$i]])) {
-                    $filter = $this->filter_columns[$column_aliases[$i]];
-
-                    if (isset($filter['parameters'][1])
-                        && strtoupper(trim($filter['parameters'][1])) == "LIKE"
-                    ) {
-                        $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
-                    } else {
-                        $keyword = $this->input['columns'][$i]['search']['value'];
-                    }
-
-                    call_user_func_array(
-                        array(
-                            $this->query,
-                            $filter['method']
-                        ),
-                        $this->injectVariable(
-                            $filter['parameters'],
-                            $keyword
-                        )
-                    );
-                }
-                /* else // otherwise do simple LIKE search
-                {
-                    $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
-
-                    //there's no need to put the prefix unless the column name is prefixed with the table name.
-                    $column = $this->prefixColumn($column_names[$i]);
-
-                    if (Config::get('datatables::search.case_insensitive', false)) {
-                        $this->query->where(DB::raw('LOWER(' . $column . ')'), 'LIKE', Str::lower($keyword));
-                    } else {
-                        //note: so, when would a ( be in the columns?  It will break a select if that's put in the columns
-                        //without a DB::raw.  It could get there in filter columns, but it wouldn't be delt with here.
-                        //why is it searching for ( ?
-                        $col = strstr($column_names[$i], '(') ? DB::raw($column) : $column;
-                        $this->query->where($col, 'LIKE', $keyword);
-                    }
-                } */
-            }
-        }
     }
 
     /**
