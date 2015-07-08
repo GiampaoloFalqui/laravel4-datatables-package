@@ -190,7 +190,7 @@ class Datatables
     {
         if ($this->query_type == 'eloquent') {
 
-            // dd($this->query->toSql());
+            // print_r($this->query->toSql());
             // dd($this->query->getBindings());
 
             $this->result_object = $this->query->get();
@@ -781,137 +781,120 @@ class Datatables
         $column_names = $this->cleanColumns($columns_not_removed, false);
         $column_aliases = $this->cleanColumns($columns_not_removed, !$this->dataFullSupport);
 
-        if ($this->input['search']['value'] != '') {
-            $that = $this;
+        $that = $this;
 
-            $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
+        $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
 
-                // global search
-                for ($i = 0, $c = count($that->input['columns']); $i < $c; $i++) {
-                    if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
+            // global search
+            for ($i = 0, $c = count($that->input['columns']); $i < $c; $i++)
+            {
+                if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
 
-                        // if filter column exists for this columns then use user defined method
-                        if (isset($that->filter_columns[$column_aliases[$i]])) {
+                    // if filter column exists for this columns then use user defined method
+                    if (isset($that->filter_columns[$column_aliases[$i]])) {
 
-                            $filter = $that->filter_columns[$column_aliases[$i]];
+                        $filter = $that->filter_columns[$column_aliases[$i]];
 
-                            // check if "or" equivalent exists for given function
-                            // and if the number of parameters given is not excess
-                            // than call the "or" equivalent
+                        // check if "or" equivalent exists for given function
+                        // and if the number of parameters given is not excess
+                        // than call the "or" equivalent
 
-                            $method_name = 'or' . ucfirst($filter['method']);
+                        $method_name = 'or' . ucfirst($filter['method']);
 
-                            if (method_exists($query->getQuery(), $method_name)
-                                && count($filter['parameters']) <= with(new \ReflectionMethod($query->getQuery(), $method_name))->getNumberOfParameters()
-                            ) {
-
-                                if (isset($filter['parameters'][1])
-                                    && strtoupper(trim($filter['parameters'][1])) == "LIKE"
-                                ) {
-                                    $keyword = $that->formatKeyword($that->input['search']['value']);
-                                } else {
-                                    $keyword = $that->input['search']['value'];
-                                }
-
-                                call_user_func_array(
-                                    array(
-                                        $query,
-                                        $method_name
-                                    ),
-                                    $that->injectVariable(
-                                        $filter['parameters'],
-                                        $keyword
-                                    )
-                                );
-                            }
-
-                        } else {
-
-                            if (! isset($that->filter_columns[$column_aliases[$i]])) {
-                                // otherwise do simple LIKE search
-
-                                $keyword = $that->formatKeyword($that->input['search']['value']);
-
-                                // Check if the database driver is PostgreSQL
-                                // If it is, cast the current column to TEXT datatype
-                                $cast_begin = null;
-                                $cast_end = null;
-                                if ($this->databaseDriver() === 'pgsql') {
-                                    $cast_begin = "CAST(";
-                                    $cast_end = " as TEXT)";
-                                }
-
-                                //there's no need to put the prefix unless the column name is prefixed with the table name.
-                                $column = $this->prefixColumn($column_names[$i]);
-
-                                if (strpos($column, '.')) {
-                                    $columnExploded = explode(".", $column, 2);
-                                    $intPrefix      = ucfirst($columnExploded[0]);
-                                    if (class_exists($intPrefix)) {
-                                        $intTable = (new $intPrefix)->getTable();
-                                        $column = "{$intTable}.{$columnExploded[1]}";
-                                    }
-                                }
-
-                                if (Config::get('datatables::search.case_insensitive', false)) {
-                                    $query->orwhere(DB::raw("LOWER({$cast_begin}{$column}{$cast_end})"), 'LIKE', Str::lower($keyword));
-                                } else {
-                                    $query->orwhere(DB::raw($cast_begin . $column . $cast_end), 'LIKE', $keyword);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // column search
-                for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++) {
-
-                    if (isset($column_aliases[$i]) && $this->input['columns'][$i]['searchable'] == "true") {
-                        if ($this->input['columns'][$i]['search']['value'] != '' || isset($this->filter_columns[$column_aliases[$i]])) {
-                            $filter = $this->filter_columns[$column_aliases[$i]];
+                        if (method_exists($query->getQuery(), $method_name)
+                            && count($filter['parameters']) <= with(new \ReflectionMethod($query->getQuery(), $method_name))->getNumberOfParameters()
+                        ) {
 
                             if (isset($filter['parameters'][1])
                                 && strtoupper(trim($filter['parameters'][1])) == "LIKE"
                             ) {
-                                $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+                                $keyword = $that->formatKeyword($that->input['search']['value']);
                             } else {
-                                $keyword = $this->input['columns'][$i]['search']['value'];
+                                $keyword = $that->input['search']['value'];
                             }
 
                             call_user_func_array(
                                 array(
                                     $query,
-                                    $filter['method']
+                                    $method_name
                                 ),
-                                $this->injectVariable(
+                                $that->injectVariable(
                                     $filter['parameters'],
                                     $keyword
                                 )
                             );
                         }
-                        /* else // otherwise do simple LIKE search
-                        {
-                            $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+
+                    } else {
+
+                        if (! isset($that->filter_columns[$column_aliases[$i]])) {
+                            // otherwise do simple LIKE search
+
+                            $keyword = $that->formatKeyword($that->input['search']['value']);
+
+                            // Check if the database driver is PostgreSQL
+                            // If it is, cast the current column to TEXT datatype
+                            $cast_begin = null;
+                            $cast_end = null;
+                            if ($this->databaseDriver() === 'pgsql') {
+                                $cast_begin = "CAST(";
+                                $cast_end = " as TEXT)";
+                            }
 
                             //there's no need to put the prefix unless the column name is prefixed with the table name.
                             $column = $this->prefixColumn($column_names[$i]);
 
-                            if (Config::get('datatables::search.case_insensitive', false)) {
-                                $this->query->where(DB::raw('LOWER(' . $column . ')'), 'LIKE', Str::lower($keyword));
-                            } else {
-                                //note: so, when would a ( be in the columns?  It will break a select if that's put in the columns
-                                //without a DB::raw.  It could get there in filter columns, but it wouldn't be delt with here.
-                                //why is it searching for ( ?
-                                $col = strstr($column_names[$i], '(') ? DB::raw($column) : $column;
-                                $this->query->where($col, 'LIKE', $keyword);
+                            if (strpos($column, '.')) {
+                                $columnExploded = explode(".", $column, 2);
+                                $intPrefix      = ucfirst($columnExploded[0]);
+                                if (class_exists($intPrefix)) {
+                                    $intTable = (new $intPrefix)->getTable();
+                                    $column = "{$intTable}.{$columnExploded[1]}";
+                                }
                             }
-                        } */
+
+                            if (Config::get('datatables::search.case_insensitive', false)) {
+                                $query->orwhere(DB::raw("LOWER({$cast_begin}{$column}{$cast_end})"), 'LIKE', Str::lower($keyword));
+                            } else {
+                                $query->orwhere(DB::raw($cast_begin . $column . $cast_end), 'LIKE', $keyword);
+                            }
+                        }
                     }
                 }
-            });
-        }
+            }
 
+            // column search
+            for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++)
+            {
+                if (isset($column_aliases[$i]) &&
+                    $this->input['columns'][$i]['searchable'] == "true")
+                {
+                    if (isset($this->filter_columns[$column_aliases[$i]]))
+                    {
+                        $filter = $this->filter_columns[$column_aliases[$i]];
 
+                        if (isset($filter['parameters'][1])
+                            && strtoupper(trim($filter['parameters'][1])) == "LIKE"
+                        ) {
+                            $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+                        } else {
+                            $keyword = $this->input['columns'][$i]['search']['value'];
+                        }
+
+                        call_user_func_array(
+                            array(
+                                $this->query,
+                                $filter['method']
+                            ),
+                            $this->injectVariable(
+                                $filter['parameters'],
+                                $keyword
+                            )
+                        );
+                    }
+                }
+            }
+        });
     }
 
     /**
