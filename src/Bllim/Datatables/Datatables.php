@@ -191,8 +191,8 @@ class Datatables
         if ($this->query_type == 'eloquent') {
 
             // print_r($this->query->toSql());
+            // print_r($this->query->getBindings());
             // die();
-            // dd($this->query->getBindings());
 
             $this->result_object = $this->query->get();
 
@@ -784,13 +784,53 @@ class Datatables
 
         $that = $this;
 
-        $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
+        $this->query = $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
+
+            for ($i = 0, $c = count($that->input['columns']); $i < $c; $i++)
+            {
+                // column search
+                if (isset($column_aliases[$i]) &&
+                    $this->input['columns'][$i]['searchable'] == "true" &&
+                    isset($this->filter_columns[$column_aliases[$i]]) &&
+                    (
+                        $this->filter_columns[$column_aliases[$i]]['parameters'][3] === 'and' ||
+                        $this->filter_columns[$column_aliases[$i]]['parameters'][3] !== ('and' || 'or')
+                    ))
+                {
+
+                    $filter = $this->filter_columns[$column_aliases[$i]];
+
+                    if (isset($filter['parameters'][1])
+                        && strtoupper(trim($filter['parameters'][1])) == "LIKE"
+                    ) {
+                        $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+                    } else {
+                        $keyword = $this->input['columns'][$i]['search']['value'];
+                    }
+
+                    call_user_func_array(
+                        array(
+                            $query,
+                            $filter['method']
+                        ),
+                        $this->injectVariable(
+                            $filter['parameters'],
+                            $keyword
+                        )
+                    );
+                }
+            }
+        });
+
+        $this->query = $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
 
             for ($i = 0, $c = count($that->input['columns']); $i < $c; $i++)
             {
                 // global search
-                if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
-
+                if (isset($column_aliases[$i]) &&
+                    $that->input['columns'][$i]['searchable'] == "true" &&
+                    $that->input['search']['value'] !== '')
+                {
                     // if filter column exists for this columns then use user defined method
                     if (isset($that->filter_columns[$column_aliases[$i]])) {
 
@@ -865,33 +905,31 @@ class Datatables
 
                 // column search
                 if (isset($column_aliases[$i]) &&
-                    $this->input['columns'][$i]['searchable'] == "true")
+                    $this->input['columns'][$i]['searchable'] == "true" &&
+                    isset($this->filter_columns[$column_aliases[$i]]) &&
+                    $this->filter_columns[$column_aliases[$i]]['parameters'][3] === 'or')
                 {
-                    if (isset($this->filter_columns[$column_aliases[$i]]))
-                    {
-                        $filter = $this->filter_columns[$column_aliases[$i]];
+                    $filter = $this->filter_columns[$column_aliases[$i]];
 
-                        if (isset($filter['parameters'][1])
-                            && strtoupper(trim($filter['parameters'][1])) == "LIKE"
-                        ) {
-                            $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
-                        } else {
-                            $keyword = $this->input['columns'][$i]['search']['value'];
-                        }
-
-                        call_user_func_array(
-                            array(
-                                $query,
-                                $filter['method']
-                            ),
-                            $this->injectVariable(
-                                $filter['parameters'],
-                                $keyword
-                            )
-                        );
+                    if (isset($filter['parameters'][1])
+                        && strtoupper(trim($filter['parameters'][1])) == "LIKE"
+                    ) {
+                        $keyword = $this->formatKeyword($this->input['columns'][$i]['search']['value']);
+                    } else {
+                        $keyword = $this->input['columns'][$i]['search']['value'];
                     }
-                }
 
+                    call_user_func_array(
+                        array(
+                            $query,
+                            $filter['method']
+                        ),
+                        $this->injectVariable(
+                            $filter['parameters'],
+                            $keyword
+                        )
+                    );
+                }
             }
         });
     }
