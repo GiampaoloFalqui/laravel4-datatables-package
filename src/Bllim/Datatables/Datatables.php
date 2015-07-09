@@ -191,6 +191,7 @@ class Datatables
         if ($this->query_type == 'eloquent') {
 
             // print_r($this->query->toSql());
+            // die();
             // dd($this->query->getBindings());
 
             $this->result_object = $this->query->get();
@@ -785,9 +786,9 @@ class Datatables
 
         $this->query->where(function ($query) use (&$that, $column_aliases, $column_names) {
 
-            // global search
             for ($i = 0, $c = count($that->input['columns']); $i < $c; $i++)
             {
+                // global search
                 if (isset($column_aliases[$i]) && $that->input['columns'][$i]['searchable'] == "true") {
 
                     // if filter column exists for this columns then use user defined method
@@ -861,11 +862,8 @@ class Datatables
                         }
                     }
                 }
-            }
 
-            // column search
-            for ($i = 0, $c = count($this->input['columns']); $i < $c; $i++)
-            {
+                // column search
                 if (isset($column_aliases[$i]) &&
                     $this->input['columns'][$i]['searchable'] == "true")
                 {
@@ -883,7 +881,7 @@ class Datatables
 
                         call_user_func_array(
                             array(
-                                $this->query,
+                                $query,
                                 $filter['method']
                             ),
                             $this->injectVariable(
@@ -893,6 +891,7 @@ class Datatables
                         );
                     }
                 }
+
             }
         });
     }
