@@ -190,9 +190,9 @@ class Datatables
     {
         if ($this->query_type == 'eloquent') {
 
-            // print_r($this->query->toSql());
-            // print_r($this->query->getBindings());
-            // die();
+            /* print_r($this->query->toSql());
+            print_r($this->query->getBindings());
+            die(); */
 
             $this->result_object = $this->query->get();
 
@@ -719,8 +719,19 @@ class Datatables
                 if (strpos($column, '.')) {
                     $columnExploded = explode(".", $column, 2);
                     $intPrefix      = ucfirst($columnExploded[0]);
-                    if (class_exists($intPrefix)) {
-                        $intTable = (new $intPrefix)->getTable();
+
+                    $reflectionClass = value(function () use ($intPrefix) {
+                        if (class_exists("Cambiomarcia\Models\\{$intPrefix}")) {
+                            return new \ReflectionClass("Cambiomarcia\Models\\{$intPrefix}");
+                        } else if (class_exists($intPrefix)) {
+                            return new \ReflectionClass($intPrefix);
+                        } else {
+                            return false;
+                        }
+                    });
+
+                    if ($reflectionClass !== false) {
+                        $intTable       = (new $reflectionClass->name)->getTable();
                         $column = "{$intTable}.{$columnExploded[1]}";
                     }
                 }
@@ -1122,7 +1133,6 @@ class Datatables
      */
     protected function getColumnName($str)
     {
-
         preg_match('#^(\S*?)\s+as\s+(\S*?)$#si', $str, $matches);
 
         if (!empty($matches)) {
